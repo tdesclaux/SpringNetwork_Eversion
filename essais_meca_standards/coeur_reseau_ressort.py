@@ -103,7 +103,39 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
                                 springs.append((i, j, L0, k1 / L0))
         
         springs_array = np.array(springs, dtype=np.float64)
-    
+        
+    if spring_network_type=='cylinder':
+        for iz in range(NZ):
+            for iy in range(NY):
+                for ix in range(NX):
+                    i = node_index(ix, iy, iz)
+                    for dx in [0, 1]:
+                        for dy in [-1, 0, 1]:
+                            for dz in [0, 1]:
+                                if dx == dy == dz == 0:
+                                    continue
+                                
+                                # Conditions priodiques en X (cylindre)
+                                jx = (ix + dx) % NX
+                                jy = iy + dy
+                                jz = iz + dz
+                                
+                                # Verifier limites Y et Z (pas periodiques)
+                                if not (0 <= jy < NY and 0 <= jz < NZ):
+                                    continue
+                                
+                                j = node_index(jx, jy, jz)
+                                
+                                # Eviter doublons
+                                if j <= i:
+                                    continue
+                                
+                                xi, yi, zi = X[i], Y[i], Z[i]
+                                xj, yj, zj = X[j], Y[j], Z[j]
+                                L0 = np.sqrt((xj - xi)**2 + (yj - yi)**2 + (zj - zi)**2)
+                                springs.append((i, j, L0, k1 / L0))
+
+        springs_array = np.array(springs, dtype=np.float64)
     # -----------------------------
     # Elastic Forces
     # ----------------------------
@@ -382,5 +414,4 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
-    # test
     
