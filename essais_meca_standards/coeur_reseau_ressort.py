@@ -107,7 +107,7 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
         
         springs_array = np.array(springs, dtype=np.float64)
         
-    if spring_network_type == 'cylinder':
+    if spring_network_type == 'tube':
         
         radius = 6
         dr = 0.3
