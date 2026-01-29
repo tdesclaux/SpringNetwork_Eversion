@@ -1,38 +1,14 @@
 from coeur_reseau_ressort import simulation_spring_newtork
-import numpy as np
-
-
 
 spring_network_type = 'plate' #plate #tube
 NX, NY, NZ = 10, 7, 3
-
-#########################################################
-
-N = NX * NY * NZ
-spacing = 1
     
-X, Y, Z = np.zeros(N), np.zeros(N), np.zeros(N)
-    
-# Génération d'une grille rectangulaire 3D
-for i in range(N):
-    iz = i // (NX * NY)
-    iy = (i % (NX * NY)) // NX
-    ix = i % NX
-        
-    X[i] = ix * spacing
-    Y[i] = iy * spacing
-    Z[i] = iz * spacing
-    
-k1 = 1
-springs = []
+##########################################################
     
 def node_index(ix, iy, iz):
     return ix + NX * (iy + NY * iz)
 
 ##########################################################
-    
-    
-    
 
 condition_type = 'force' #displacement #force
 pull_force = 0
@@ -46,7 +22,7 @@ if condition_type == 'force':
     
 if condition_type == 'displacement':
     fixed_indices = [node_index(0, iy, iz) for iy in range(NY) for iz in range(NZ)]
-    prescribed_indices = [node_index(NX - 1, iy, iz) for iy in range(NY)]
+    prescribed_indices = [node_index(NX - 1, iy, 1) for iy in range(NY)]
 
 
 Gamma = 0.2

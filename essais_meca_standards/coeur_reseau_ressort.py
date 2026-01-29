@@ -50,16 +50,6 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     
     X, Y, Z = np.zeros(N), np.zeros(N), np.zeros(N)
     
-    # Génération d'une grille rectangulaire 3D
-    for i in range(N):
-        iz = i // (NX * NY)
-        iy = (i % (NX * NY)) // NX
-        ix = i % NX
-        
-        X[i] = ix * spacing
-        Y[i] = iy * spacing
-        Z[i] = iz * spacing
-    
     k1 = 1
     springs = []
     
@@ -67,6 +57,19 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
         return ix + NX * (iy + NY * iz)
     
     if spring_network_type == 'plate':
+        
+        spacing = 1
+        
+        # Génération d'une grille rectangulaire 3D
+        for i in range(N):
+            iz = i // (NX * NY)
+            iy = (i % (NX * NY)) // NX
+            ix = i % NX
+                
+            X[i] = ix * spacing
+            Y[i] = iy * spacing
+            Z[i] = iz * spacing
+            
         # Création des ressorts entre nœuds voisins
         for iz in range(NZ):
             for iy in range(NY):
@@ -104,7 +107,18 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
         
         springs_array = np.array(springs, dtype=np.float64)
         
-    if spring_network_type=='cylinder':
+    if spring_network_type == 'cylinder':
+        
+        radius = 6
+        dr = 0.3
+        
+        for i in range(N):
+            I = i // (NX * NY)
+            J = (i - i % NX - I * (NX * NY)) // NX
+            X[i] = i % NX
+            Y[i] = (radius + (I-1) * dr) * np.cos(2 * np.pi * J / NY)
+            Z[i] = (radius + (I-1) * dr) * np.sin(2 * np.pi * J / NY)
+            
         for iz in range(NZ):
             for iy in range(NY):
                 for ix in range(NX):
