@@ -382,4 +382,5 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
+    # test
     
