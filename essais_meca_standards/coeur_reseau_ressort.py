@@ -383,4 +383,3 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     plt.tight_layout()
     plt.show()
     
-#TEST PUSH
