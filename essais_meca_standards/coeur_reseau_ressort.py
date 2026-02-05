@@ -124,20 +124,19 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
             for iy in range(NY):
                 for ix in range(NX):
                     i = node_index(ix, iy, iz)
-                    for dx in [0, 1]:
+                    for dx in [-1, 0, 1]:
                         for dy in [-1, 0, 1]:
-                            for dz in [0, 1]:
+                            for dz in [-1, 0, 1]:
                                 if dx == dy == dz == 0:
                                     continue
                                 
-                                # Conditions priodiques en X (cylindre)
-                                jx = (ix + dx) % NX
+                                # Conditions priodiques en Y (cylindre)
+                                jx = ix + dx
                                 jy = (iy + dy) % NY
                                 jz = iz + dz
                                 
-                                # Verifier limites Y et Z (pas periodiques)
-                                if not (0 <= jz < NZ):
-                                # if not (0 <= jy < NY and 0 <= jz < NZ):
+                                # Verifier limites X et Z (pas periodiques)
+                                if not (0 <= jx < NX and 0 <= jz < NZ):
                                     continue
                                 
                                 j = node_index(jx, jy, jz)
