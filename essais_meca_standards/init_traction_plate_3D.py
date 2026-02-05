@@ -1,12 +1,13 @@
 from coeur_reseau_ressort import simulation_spring_newtork
 
 spring_network_type = 'tube' #plate #tube
-NX, NY, NZ = 10, 7, 3
-    
+NX, NY, NZ = 81, 50, 3
+
 ##########################################################
-    
+
 def node_index(ix, iy, iz):
-    return ix + NX * (iy + NY * iz)
+    return ix + NX * (iy + NY * iz)     
+
 
 ##########################################################
 
@@ -22,24 +23,21 @@ if condition_type == 'force':
     moved_indices = [node_index(NX - 1, iy, iz) for iy in range(NY) for iz in range(NZ)]
     
 if condition_type == 'displacement':
-    fixed_indices = [node_index(0, iy, iz) for iy in range(NY) for iz in range(NZ)]
-    prescribed_indices = [node_index(NX - 1, iy, 1) for iy in range(NY)]
+    #fixed_indices = [node_index(0, iy, iz) for iy in range(NY) for iz in range(NZ)]
+    # prescribed_indices = [node_index(NX - 1, iy, 1) for iy in range(NY)]
+    fixed_indices = []
+    prescribed_indices = []
     moved_indices = []
 
-
+p0 = 0.1
 Gamma = 0.2
 dt = 0.2
-intermediate_steps = 10
-relaxation_steps = 1000
+intermediate_steps = 1
+relaxation_steps = 1500
 
 path = r"C:\Users\DELL\Documents\M3S\SpringNetwork_Eversion\essais_meca_standards\data"
 data_filename = "data_01.csv" 
-simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, moved_indices, prescribed_indices, condition_type, pull_force, force_direction, Gamma, dt, intermediate_steps, relaxation_steps, path, data_filename)
-
-
-
-
-
+simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, moved_indices, prescribed_indices, condition_type, pull_force, force_direction, p0, Gamma, dt, intermediate_steps, relaxation_steps, path, data_filename)
 
 
 

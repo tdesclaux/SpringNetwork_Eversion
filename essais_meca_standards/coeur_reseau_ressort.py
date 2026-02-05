@@ -38,10 +38,11 @@ from numba import njit, prange, set_num_threads
 from tqdm import tqdm
 import numba
 
-def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, moved_indices, prescribed_indices, condition_type, pull_force, force_direction, Gamma, dt, intermediate_steps, relaxation_steps, path, data_filename):
+def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, moved_indices, prescribed_indices, condition_type, pull_force, force_direction, p0, Gamma, dt, intermediate_steps, relaxation_steps, path, data_filename):
+    
     
     # -----------------------------
-    # Create Elastic Network - PLATE
+    # Create Elastic Network 
     # -----------------------------
     spacing = 1.0  # Espacement entre les nœuds
     
@@ -131,11 +132,12 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
                                 
                                 # Conditions priodiques en X (cylindre)
                                 jx = (ix + dx) % NX
-                                jy = iy + dy
+                                jy = (iy + dy) % NY
                                 jz = iz + dz
                                 
                                 # Verifier limites Y et Z (pas periodiques)
-                                if not (0 <= jy < NY and 0 <= jz < NZ):
+                                if not (0 <= jz < NZ):
+                                # if not (0 <= jy < NY and 0 <= jz < NZ):
                                     continue
                                 
                                 j = node_index(jx, jy, jz)
@@ -279,6 +281,98 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     
         return F_total
     
+
+    # ------------------------------------------------------
+    # Construction voisins centerline pour forces pression
+    # ------------------------------------------------------
+
+    max_neighbors = 4  # gauche, bas, droite, haut
+    iz_centerline = 1
+
+    neighbors = -np.ones((N, max_neighbors), dtype=np.int64)  # -1 si pas de voisin
+    n_neighbors = np.zeros(N, dtype=np.int64)
+
+    for ix in range(1, NX-1):
+        for iy in range(NY):
+            i = node_index(ix, iy, iz_centerline)
+            J = []
+            directions = [(-1, 0), (0, -1), (1, 0), (0, 1)]
+
+            for dx, dy in directions:
+                jx, jy, jz = ix + dx, (iy + dy) % NY, iz_centerline
+                if 0 <= jx < NX:
+                    j = node_index(jx, jy, jz)
+                    J.append(j)
+
+            n_neighbors[i] = len(J)
+            for k, nj in enumerate(J):
+                neighbors[i, k] = nj
+                
+    # -----------------------------
+    # Calcul de la force de pression
+    # -----------------------------
+
+    @njit(parallel=True)
+    def compute_pressure_force_numba(r, p0, neighbors, n_neighbors, NX, NY, iz_centerline):
+        P = np.zeros_like(r)
+        N_normalized = compute_normal_numba(r, neighbors, n_neighbors)
+
+        for i in prange(r.shape[0]):
+            ix = i % NX
+            iy = (i // NX) % NY
+            iz = i // (NX * NY)
+
+            # Points centerline seulement
+            if iz == iz_centerline and 1 <= ix <= NX-2:
+                nx, ny, nz = N_normalized[i, :]
+                P[i, 0] = -p0 * nx
+                P[i, 1] = -p0 * ny
+                P[i, 2] = -p0 * nz
+
+        return P
+    
+    # -----------------------------
+    # Calcul des normales (points centerline)
+    # -----------------------------
+    @njit(inline='always')
+    def cross(u, v):
+        c0 = u[1]*v[2] - u[2]*v[1]
+        c1 = u[2]*v[0] - u[0]*v[2]
+        c2 = u[0]*v[1] - u[1]*v[0]
+        return np.array((c0, c1, c2), dtype=np.float64)
+
+
+    @njit(parallel=True)
+    def compute_normal_numba(r, neighbors, n_neighbors):
+        N_normalized = np.zeros_like(r)  # n_points x 3
+
+        for i in prange(r.shape[0]):
+            k = n_neighbors[i]
+            if k == 0:
+                continue
+
+            n = np.zeros(3, dtype=np.float64)
+            vectors = np.zeros((k, 3), dtype=np.float64)
+
+            for j in range(k):
+                nj = neighbors[i, j]
+                vectors[j, :] = r[nj] - r[i]
+
+            for j in range(k):
+                v1 = vectors[j]
+                v2 = vectors[(j+1) % k]
+                n += cross(v1, v2)
+
+            n /= k
+            norm = np.sqrt(n[0]**2 + n[1]**2 + n[2]**2)
+            if norm != 0.0:
+                n /= norm
+
+            N_normalized[i, :] = n
+
+        return N_normalized
+    
+    
     # -----------------------------
     # Time Integration
     # -----------------------------
@@ -300,11 +394,13 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
             Fext[i, 2] = pull_force  # force in x-direction
     
     
-    def velocity_verlet_step_numba(r, v, dt, t, springs, r_cutoff, k_rep, gamma=0.0, fixed_idx=None, prescribed_idx=None, Fext=0):
+    def velocity_verlet_step_numba(r, v, dt, t, springs, r_cutoff, k_rep, p0, gamma=0.0, fixed_idx=None, prescribed_idx=None, Fext=0):
         F = compute_spring_forces_numba(r, springs)
         if condition_type == 'force':
             F+= Fext    
         #F += compute_repulsive_forces_centerline_numba(r, centerline_indices, r_cutoff, k_rep)
+        F += compute_pressure_force_numba(r, p0, neighbors, n_neighbors, NX, NY, iz_centerline)
+                
         F_damped = F - gamma * v
     
         v += 0.5 * F_damped * dt
@@ -314,6 +410,7 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
         if condition_type == 'force':
             F_new+=Fext
         #F_new += compute_repulsive_forces_centerline_numba(r, centerline_indices, r_cutoff, k_rep)
+        F_new += compute_pressure_force_numba(r, p0, neighbors, n_neighbors, NX, NY, iz_centerline)
         F_damped_new = F_new - gamma * v
         v += 0.5 * F_damped_new * dt
     
@@ -378,7 +475,7 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     
     print("Running simulation...")
     for step in tqdm(range(steps)):
-        r, v = velocity_verlet_step_numba(r, v, dt, step, springs_array, r_cutoff, k_rep, Gamma, fixed_indices, prescribed_indices, Fext)
+        r, v = velocity_verlet_step_numba(r, v, dt, step, springs_array, r_cutoff, k_rep, p0, Gamma, fixed_indices, prescribed_indices, Fext)
         Energy[step] = compute_elastic_energy_numba(r, springs_array)
         if step in step2save:
             r_save.append(r.copy())
@@ -429,3 +526,25 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     plt.tight_layout()
     plt.show()
     
+    
+    ## A SUPPRIMER 
+    x = r[:, 0]; y = r[:, 1]; z = r[:, 2]
+    X = r0[:, 0]; Y = r0[:, 1]; Z = r0[:, 2]
+
+    slice_x = 40
+    IDX_PLOT = np.array([node_index(slice_x, iy, 1) for iy in range(NY)])
+
+    
+    # -----------------------------
+    # PLOT COUPE
+    # -----------------------------
+    plt.figure(figsize=(6,6))
+    plt.plot(Y[IDX_PLOT], Z[IDX_PLOT], '--', label='initial')
+    plt.plot(y[IDX_PLOT], z[IDX_PLOT], '-o', label='déformé')
+    plt.axis('equal')
+    plt.xlabel('y'); plt.ylabel('z')
+    plt.title(f'Coupe à x={slice_x} pour P0 = {p0}')
+    plt.legend()
+
+
+
