@@ -151,6 +151,20 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
                                 springs.append((i, j, L0, k1 / L0))
 
         springs_array = np.array(springs, dtype=np.float64)
+        
+        # Fait une liste propre des voisins
+        springs_cut = springs_array[:,0:2]
+        voisins = [[] for _ in range(2*N)]
+        for i, j in springs_cut:
+            voisins[int(i)].append(int(j))
+            voisins[int(j)].append(int(i))
+
+        # Fait plutot une matrice, pour Numba
+        Npart = len(voisins)
+        adj = np.zeros((Npart, Npart), dtype=np.bool_)
+        for i in range(Npart):
+            for j in voisins[i]:
+                adj[i, j] = True 
     # -----------------------------
     # Elastic Forces
     # ----------------------------
@@ -201,83 +215,35 @@ def simulation_spring_newtork(spring_network_type, NX, NY, NZ, fixed_indices, mo
     # Plan médian (iz = 1)
     iz = int(NZ/2)
     centerline_indices = np.array([node_index(ix, iy, iz) for ix in range(NX) for iy in range(NY)], dtype=np.int64)
-    
+        
     @njit(parallel=True)
-    def compute_repulsive_forces_centerline_numba(r, centerline_indices, r_cutoff, k_rep):
-        N = centerline_indices.shape[0]
+    def compute_repulsive_forces_centerline_numba(r, centerline_indices, r_cutoff, k_rep, adj):
+
         F_total = np.zeros_like(r)
         epsilon = 1e-6
-        r_cell = 0.3
-    
-        # Bounding box
-        x_min = y_min = z_min = 1e10
-        x_max = y_max = z_max = -1e10
-        for idx in centerline_indices:
-            xi, yi, zi = r[idx]
-            if xi < x_min: x_min = xi
-            if yi < y_min: y_min = yi
-            if zi < z_min: z_min = zi
-            if xi > x_max: x_max = xi
-            if yi > y_max: y_max = yi
-            if zi > z_max: z_max = zi
-    
-        x_min -= epsilon
-        y_min -= epsilon
-        z_min -= epsilon
-        x_max += epsilon
-        y_max += epsilon
-        z_max += epsilon
-    
-        Lx, Ly, Lz = x_max - x_min, y_max - y_min, z_max - z_min
-        n_cells_x = max(1, int(Lx / r_cell))
-        n_cells_y = max(1, int(Ly / r_cell))
-        n_cells_z = max(1, int(Lz / r_cell))
-    
-        head = -1 * np.ones((n_cells_x, n_cells_y, n_cells_z), dtype=np.int32)
-        next_particle = -1 * np.ones(r.shape[0], dtype=np.int32)
-    
-        for idx in centerline_indices:
-            cx = int((r[idx, 0] - x_min) / r_cell)
-            cy = int((r[idx, 1] - y_min) / r_cell)
-            cz = int((r[idx, 2] - z_min) / r_cell)
-            if cx >= n_cells_x: cx = n_cells_x - 1
-            if cy >= n_cells_y: cy = n_cells_y - 1
-            if cz >= n_cells_z: cz = n_cells_z - 1
-            next_particle[idx] = head[cx, cy, cz]
-            head[cx, cy, cz] = idx
-    
+        r_cell = 10.1
+
+        # Thread-local forces
         thread_forces = np.zeros((numba.get_num_threads(), r.shape[0], 3), dtype=np.float64)
-    
-        for cx in prange(n_cells_x):
-            for cy in range(n_cells_y):
-                for cz in range(n_cells_z):
-                    i = head[cx, cy, cz]
-                    while i != -1:
-                        for dx in [-1, 0, 1]:
-                            nx = cx + dx
-                            if nx < 0 or nx >= n_cells_x: continue
-                            for dy in [-1, 0, 1]:
-                                ny = cy + dy
-                                if ny < 0 or ny >= n_cells_y: continue
-                                for dz in [-1, 0, 1]:
-                                    nz = cz + dz
-                                    if nz < 0 or nz >= n_cells_z: continue
-                                    j = head[nx, ny, nz]
-                                    while j != -1:
-                                        if j > i:
-                                            rij = r[j] - r[i]
-                                            d = np.sqrt((rij ** 2).sum())
-                                            if d < r_cutoff and d > 1e-8:
-                                                rep_force = k_rep * (r_cutoff - d) / d * rij
-                                                tid = numba.get_thread_id()
-                                                thread_forces[tid, i] -= rep_force
-                                                thread_forces[tid, j] += rep_force
-                                        j = next_particle[j]
-                        i = next_particle[i]
-    
+
+        for idx_i in prange(len(centerline_indices)):
+            for idx_j in range(idx_i,len(centerline_indices)):
+                part_i = int(centerline_indices[idx_i])
+                part_j = int(centerline_indices[idx_j])
+                if adj[part_i,part_j]:
+                    continue
+                else:
+                    rij = r[part_j] - r[part_i]
+                    d = np.sqrt((rij ** 2).sum())
+                    if d < r_cutoff and d > 1e-8:
+                        rep_force = k_rep * (r_cutoff - d) / d * rij
+                        tid = numba.get_thread_id()
+                        thread_forces[tid, part_i] -= rep_force
+                        thread_forces[tid, part_j] += rep_force
+         # Reduction step: sum thread-local contributions
         for tid in range(thread_forces.shape[0]):
-            F_total += thread_forces[tid]
-    
+             F_total += thread_forces[tid]
+        
         return F_total
     
 
