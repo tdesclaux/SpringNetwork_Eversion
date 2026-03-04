@@ -49,7 +49,7 @@ def produce_r_save(filepath):
 path = r"./data_torquespring"
 ib = 0
 plt.figure()
-colB = [[0,0,0],[1,0,0],[0,0,1]]
+colB = [[0,0.8,0],[1,0.5,0],[1,0,0]]
 for B in [0.05,0.1,0.5]:
     filepath_r = path + r"/data_NX=10_NY=5_NZ=1_B="+str(B)+".csv"
     filepath_F = path + r"/P_save_NX=10_NY=5_NZ=1_B="+str(B)+".csv"
@@ -92,7 +92,7 @@ for B in [0.05,0.1,0.5]:
         # plt.plot(Y[IDX_PLOT], Z[IDX_PLOT], '--', label='initial')
         plt.plot(x[IDX_PLOT], z[IDX_PLOT]/P_save[step]*B, '-',color=colB[ib],label=f'déformé incrément={step}')
         # plt.axis('equal')
-        plt.xlabel('x (m)'); plt.ylabel('$u_z B/P$ (m^5)')
+        plt.xlabel('x (m)'); plt.ylabel('$u_z B/P$ (m$^5$)')
         plt.grid(True, alpha=0.3)
     ib = ib+1
 
